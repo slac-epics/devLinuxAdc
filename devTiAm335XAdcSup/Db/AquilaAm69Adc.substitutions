@@ -1,0 +1,6 @@
+file Am335xAdcChannel.template {
+    { P="$(P)", D=0, B=0, C=0 }
+    { P="$(P)", D=0, B=0, C=1 }
+    { P="$(P)", D=0, B=0, C=2 }
+    { P="$(P)", D=0, B=0, C=3 }
+}

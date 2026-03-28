@@ -1,0 +1,5 @@
+# SPDX-FileCopyrightText: 2003 Argonne National Laboratory
+#
+# SPDX-License-Identifier: EPICS
+
+device(ai, INST_IO, devTiAm335XAdc, "tiAm335XAdc")

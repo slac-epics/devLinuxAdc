@@ -1,3 +1,18 @@
+/**
+ *-----------------------------------------------------------------------------
+ * Company    : SLAC National Accelerator Laboratory
+ *-----------------------------------------------------------------------------
+ * Description: Device support for ADCs using the TI AM335X Linux driver
+ * ----------------------------------------------------------------------------
+ * This file is part of the devTiAm335XAdc package. It is subject to
+ * the license terms in the LICENSE.txt file found in the top-level directory
+ * of this distribution and at:
+ *    https://confluence.slac.stanford.edu/display/ppareg/LICENSE.html.
+ * No part of the devTiAm335XAdc package, including this file, may be
+ * copied, modified, propagated, or distributed except according to the terms
+ * contained in the LICENSE.txt file.
+ * ----------------------------------------------------------------------------
+**/
 
 #define USE_TYPED_DSET 1
 #include <epicsExport.h>
@@ -12,13 +27,12 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <math.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/poll.h>
-#include <signal.h>
+#include <endian.h>
 
 static long tiAm335XAdc_init(int after);
 static long tiAm335XAdc_init_record(struct dbCommon* precord);
@@ -66,6 +80,7 @@ struct adc_buffer {
   struct adc_buffer* next;
   void* scratch;
   size_t scratchSize;
+  epicsMutexId mutex; /* guards ADC channel data */
 };
 
 static struct adc_buffer* buffers = NULL;
@@ -93,6 +108,7 @@ find_or_create_buffer(int dev, int buff)
   b->num = buff;
   b->dev = dev;
   b->length = 2;
+  b->mutex = epicsMutexCreate();
   buffers = b;
   numBuffers++;
   return b;
@@ -119,9 +135,7 @@ tiAm335XAdc_init_record(struct dbCommon* precord)
   char buf[512];
   strncpy(buf, rec->inp.value.instio.string, sizeof(buf));
 
-  char* p = buf;
-  //p++; /* skip @ prefix */
-  const char* devNum = strtok(p, ",");
+  const char* devNum = strtok(buf, ",");
   const char* bufNum = strtok(NULL, ",");
   const char* chNum = strtok(NULL, ",");
 
@@ -200,13 +214,47 @@ tiAm335XAdc_init_record(struct dbCommon* precord)
   return 0;
 }
 
+/* swap bytes if necessary */
+static void
+data_swap(struct adc_channel* chan, char* buf, size_t s)
+{
+#if BYTE_ORDER == LITTLE_ENDIAN
+  int need_swap = !chan->is_le;
+#elif BYTE_ORDER == BIG_ENDIAN
+  int need_swap = chan->is_le;
+#else
+  #error What strange machine are you using?
+#endif
+
+  if (!need_swap || s <= 1)
+    return;
+
+  char tmp[s];
+  memcpy(tmp, buf, s);
+  for (int i = 0; i < s; ++i) {
+    buf[i] = tmp[s-i-1];
+  }
+}
+
 static long
 tiAm335XAdc_read_record(aiRecord* precord)
 {
   struct adc_dpvt* dpvt = precord->dpvt;
   precord->pact = FALSE;
 
+  epicsMutexLock(dpvt->adc->mutex);
+
+  /* swap if the data is incompatible with host byte order */
+  data_swap(dpvt->chan, dpvt->chan->buf, sizeof dpvt->chan->buf);
+
   switch (dpvt->chan->bytes) {
+  case 8:
+    /* aiRecord.rval is only 4 bytes, but we'll just let it truncate */
+    if (dpvt->chan->is_signed)
+      precord->rval = *(int64_t*)dpvt->chan->buf;
+    else
+      precord->rval = *(uint64_t*)dpvt->chan->buf;
+    break;
   case 4:
     if (dpvt->chan->is_signed)
       precord->rval = *(int32_t*)dpvt->chan->buf;
@@ -219,10 +267,20 @@ tiAm335XAdc_read_record(aiRecord* precord)
     else
       precord->rval = *(uint16_t*)dpvt->chan->buf;
     break;
+  case 1:
+    if (dpvt->chan->is_signed)
+      precord->rval = *(int8_t*)dpvt->chan->buf;
+    else
+      precord->rval = *(uint8_t*)dpvt->chan->buf;
+    break;
   default:
     assert(!"Unsupported byte count");
   }
 
+  epicsMutexUnlock(dpvt->adc->mutex);
+
+  precord->rval >>= dpvt->chan->shift;
+  precord->udf = FALSE;
   return 0;
 }
 
@@ -328,13 +386,11 @@ read_process_buffer(struct adc_buffer* b)
   ssize_t nr = read(b->fd, b->scratch, b->scratchSize);
   if (nr == 0)
     return;
+  
+  epicsMutexLock(b->mutex);
 
-  //printf("Read: %d, Scratch=%d\n", (int)nr, (int)b->scratchSize);
-  //assert((nr % b->stride) == 0);
-
-  if ((nr % b->stride) != 0) {
-    printf("nr=%d, stride=%d\n", (int)nr, b->stride);
-  }
+  /* we should always be reading at least one "packet" of data */
+  assert((nr % b->stride) == 0);
 
   uint8_t* scratch = b->scratch;
   for (int pass = 0; pass < nr / b->stride; ++pass) {
@@ -348,21 +404,25 @@ read_process_buffer(struct adc_buffer* b)
   for (int i = 0; i < b->numChannels; ++i) {
     scanIoRequest(b->chmap[i]->scan);
   }
+  
+  epicsMutexUnlock(b->mutex);
 }
 
 static void
 reader_thread(void* pvt)
 {
   struct adc_buffer** buffs = calloc(sizeof(struct adc_buffer*), numBuffers);
-
   struct pollfd* pollfds = calloc(sizeof(struct pollfd), numBuffers);
+
   int n = 0;
   for (struct adc_buffer* b = buffers; b; b = b->next, ++n) {
     buffs[n] = b;
     pollfds[n].fd = b->fd;
     pollfds[n].events |= POLLIN;
   }
+
   while (1) {
+    /* wait forever for new data */
     poll(pollfds, n, -1);
 
     for (int i = 0; i < numBuffers; ++i) {

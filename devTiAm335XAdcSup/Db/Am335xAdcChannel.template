@@ -6,6 +6,6 @@
 record(ai, "$(P)ADC$(D):CH$(C)") {
     field(DESC, "Device $(D), Channel $(C)")
     field(DTYP, "tiAm335XAdc")
-    field(SCAN, ".1 second")
+    field(SCAN, "I/O Intr")
     field(INP,  "@$(D),$(B),$(C)")
 }

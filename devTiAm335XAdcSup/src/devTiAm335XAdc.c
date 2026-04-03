@@ -13,7 +13,6 @@
  * contained in the LICENSE.txt file.
  * ----------------------------------------------------------------------------
 **/
-
 #define USE_TYPED_DSET 1
 #include <epicsExport.h>
 #include <aiRecord.h>
@@ -24,6 +23,7 @@
 #include <dbScan.h>
 #include <epicsThread.h>
 
+#include <math.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -60,6 +60,7 @@ struct adc_channel
 {
   int offset; /* byte offset from the beginning of the interleaved adc data */
   int bytes;  /* number of bytes of data */
+  int bits;   /* bit range of the ADC */
   int is_signed;
   int is_le;
   int shift;
@@ -90,6 +91,7 @@ struct adc_dpvt
 {
   struct adc_buffer* adc;
   struct adc_channel* chan;
+  double slope;
   char path[256];
 };
 
@@ -107,7 +109,7 @@ find_or_create_buffer(int dev, int buff)
   b->next = buffers;
   b->num = buff;
   b->dev = dev;
-  b->length = 2;
+  b->length = 256;
   b->mutex = epicsMutexCreate();
   buffers = b;
   numBuffers++;
@@ -138,13 +140,15 @@ tiAm335XAdc_init_record(struct dbCommon* precord)
   const char* devNum = strtok(buf, ",");
   const char* bufNum = strtok(NULL, ",");
   const char* chNum = strtok(NULL, ",");
+  const char* vrNum = strtok(NULL, ",");
 
-  if (!devNum || !bufNum || !chNum) {
+  if (!devNum || !bufNum || !chNum || !vrNum) {
     printf("Invalid syntax for INP link\n");
     return S_dev_badInpType;
   }
 
   int dev = 0, buff = 0, chan = 0;
+  double vref = 0;
 
   if (epicsParseInt32(devNum, &dev, 10, NULL) != 0) {
     printf("Invalid number for device\n");
@@ -158,6 +162,11 @@ tiAm335XAdc_init_record(struct dbCommon* precord)
 
   if (epicsParseInt32(chNum, &chan, 10, NULL) != 0) {
     printf("Invalid channel number\n");
+    return S_dev_badInpType;
+  }
+
+  if (epicsParseDouble(vrNum, &vref, NULL) != 0){ 
+    printf("Invalid Vref\n");
     return S_dev_badInpType;
   }
 
@@ -194,11 +203,19 @@ tiAm335XAdc_init_record(struct dbCommon* precord)
   read_file(path, fmtInfo, sizeof(fmtInfo));
 
   char le[3], signedness;
-  int bits, shift;
+  int bits, shift, adcbits;
   sscanf(
-    fmtInfo, "%2s:%c%*u/%u>>%d",
-    le, &signedness, &bits, &shift
+    /* le:u12/16>>0 */
+    fmtInfo, "%2s:%c%u/%u>>%d",
+    le, &signedness, &adcbits, &bits, &shift
   );
+
+  /* compute slope for converting rval -> val.
+   * Since this depends on bit precision of the ADC (obtained from sysfs),
+   * we won't rely on ESLO from the DB.
+   * Vi = (Vref * counts) / (range-1)
+   */
+  dpvt->slope = vref / (pow(2, bits) - 1);
 
   /* find or add a new buffer */
   struct adc_buffer* b = find_or_create_buffer(dev, buff);
@@ -206,6 +223,7 @@ tiAm335XAdc_init_record(struct dbCommon* precord)
 
   struct adc_channel* ch = add_channel(b);
   ch->bytes = bits / 8;
+  ch->bits = adcbits;
   ch->shift = shift;
   ch->is_le = strcasecmp(le, "le");
   ch->is_signed = signedness != 'u';
@@ -281,7 +299,8 @@ tiAm335XAdc_read_record(aiRecord* precord)
 
   precord->rval >>= dpvt->chan->shift;
   precord->udf = FALSE;
-  return 0;
+  precord->val = dpvt->slope * precord->rval;
+  return 2; /* 2 = dont convert */
 }
 
 static long
@@ -391,6 +410,16 @@ read_process_buffer(struct adc_buffer* b)
 
   /* we should always be reading at least one "packet" of data */
   assert((nr % b->stride) == 0);
+
+  /* horrible ugly debugging */
+#if 0
+  for (int i = 0; i < nr; ++i) {
+    printf(" 0x%02X", ((uint8_t*)b->scratch)[i]);
+    if (i > 0 && i % 16 == 0)
+      printf("\n");
+  }
+  printf("\n");
+#endif
 
   uint8_t* scratch = b->scratch;
   for (int pass = 0; pass < nr / b->stride; ++pass) {

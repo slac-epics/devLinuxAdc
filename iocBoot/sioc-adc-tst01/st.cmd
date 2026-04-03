@@ -1,4 +1,4 @@
-#!../../bin/linux-tdx-aarch64/devTiAm335XAdcApp
+#!../../bin/linux-tdx-aarch64/devTiAm335XAdcTest
 
 #- SPDX-FileCopyrightText: 2005 Argonne National Laboratory
 #-

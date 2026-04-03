@@ -1,6 +1,7 @@
+# Vref for AM-69 SoM is 1.8v
 file Am335xAdcChannel.template {
-    { P="$(P)", D=0, B=0, C=0 }
-    { P="$(P)", D=0, B=0, C=1 }
-    { P="$(P)", D=0, B=0, C=2 }
-    { P="$(P)", D=0, B=0, C=3 }
+    { P="$(P)", D=0, B=0, C=0, VR="1.8" }
+    { P="$(P)", D=0, B=0, C=1, VR="1.8" }
+    { P="$(P)", D=0, B=0, C=2, VR="1.8" }
+    { P="$(P)", D=0, B=0, C=3, VR="1.8" }
 }

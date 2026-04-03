@@ -2,10 +2,12 @@
 # P = Record prefix
 # C = Channel number (0-based index)
 # B = Buffer number. This is the number for /sys/bus/iio/iio:device$(D)/buffer$(B). Usually 0
+# VR = Vref (Voltage reference, in volts)
 
 record(ai, "$(P)ADC$(D):CH$(C)") {
-    field(DESC, "Device $(D), Channel $(C)")
+    field(DESC, "ADC $(D), Channel $(C)")
     field(DTYP, "tiAm335XAdc")
     field(SCAN, "I/O Intr")
-    field(INP,  "@$(D),$(B),$(C)")
+    field(EGU, "$(EGU=V)")
+    field(INP,  "@$(D),$(B),$(C),$(VR)")
 }

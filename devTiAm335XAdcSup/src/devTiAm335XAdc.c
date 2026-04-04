@@ -64,6 +64,7 @@ struct adc_channel
   int is_signed;
   int is_le;
   int shift;
+  int chan;
   char buf[8];
   IOSCANPVT scan;
   struct adc_channel* next;
@@ -215,7 +216,7 @@ tiAm335XAdc_init_record(struct dbCommon* precord)
    * we won't rely on ESLO from the DB.
    * Vi = (Vref * counts) / (range-1)
    */
-  dpvt->slope = vref / (pow(2, bits) - 1);
+  dpvt->slope = vref / (pow(2, adcbits) - 1);
 
   /* find or add a new buffer */
   struct adc_buffer* b = find_or_create_buffer(dev, buff);
@@ -227,6 +228,7 @@ tiAm335XAdc_init_record(struct dbCommon* precord)
   ch->shift = shift;
   ch->is_le = strcasecmp(le, "le");
   ch->is_signed = signedness != 'u';
+  ch->chan = chan;
   dpvt->chan = ch;
   scanIoInit(&ch->scan);
   return 0;
@@ -330,7 +332,7 @@ tiAm335XAdc_init(int after)
     b->chmap = calloc(sizeof(struct adc_channel*), b->numChannels);
     int n = 0, off = 0;
     for (struct adc_channel* c = b->channels; c; c = c->next, ++n) {
-      b->chmap[n] = c;
+      b->chmap[c->chan] = c;
       c->offset = off;
       off += c->bytes;
     }

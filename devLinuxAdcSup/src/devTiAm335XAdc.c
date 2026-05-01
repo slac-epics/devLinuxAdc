@@ -310,6 +310,8 @@ tiAm335XAdc_get_ioint_info(int cmd, struct dbCommon* precord, IOSCANPVT* ppvt)
 {
   aiRecord* rec = (aiRecord*)precord;
   struct adc_dpvt* dpvt = rec->dpvt;
+  if (!dpvt)
+    return -1;
   *ppvt = dpvt->chan->scan;
   return 0;
 }

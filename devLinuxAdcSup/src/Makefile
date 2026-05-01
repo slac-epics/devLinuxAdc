@@ -12,19 +12,19 @@ include $(TOP)/configure/CONFIG
 #==================================================
 # build a support library
 
-LIBRARY_IOC_Linux += devTiAm335XAdc
+LIBRARY_IOC_Linux += devLinuxAdc
 
 # xxxRecord.h will be created from xxxRecord.dbd
 #DBDINC += xxxRecord
-# install devTiAm335XAdc.dbd into <top>/dbd
-DBD += devTiAm335XAdc.dbd
+# install devLinuxAdc.dbd into <top>/dbd
+DBD += devLinuxAdc.dbd
 
 # specify all source files to be compiled and added to the library
-#devTiAm335XAdc_SRCS += xxx
+#devLinuxAdc_SRCS += xxx
 
-devTiAm335XAdc_SRCS += devTiAm335XAdc.c
+devLinuxAdc_SRCS += devTiAm335XAdc.c
 
-devTiAm335XAdc_LIBS += $(EPICS_BASE_IOC_LIBS)
+devLinuxAdc_LIBS += $(EPICS_BASE_IOC_LIBS)
 
 #===========================
 

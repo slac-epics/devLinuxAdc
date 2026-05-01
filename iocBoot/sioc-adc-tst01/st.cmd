@@ -10,8 +10,8 @@
 #< envPaths
 
 ## Register all support components
-dbLoadDatabase "../../dbd/devTiAm335XAdcTest.dbd"
-devTiAm335XAdcTest_registerRecordDeviceDriver(pdbbase) 
+dbLoadDatabase "../../dbd/devLinuxAdcTest.dbd"
+devLinuxAdcTest_registerRecordDeviceDriver(pdbbase) 
 
 ## Load record instances
 dbLoadRecords("../../db/AquilaAm69Adc.db","P=ADC:")

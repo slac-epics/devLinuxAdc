@@ -267,31 +267,33 @@ tiAm335XAdc_read_record(aiRecord* precord)
   /* swap if the data is incompatible with host byte order */
   data_swap(dpvt->chan, dpvt->chan->buf, sizeof dpvt->chan->buf);
 
+  uint64_t uv = 0;
+  int64_t sv = 0;
   switch (dpvt->chan->bytes) {
   case 8:
     /* aiRecord.rval is only 4 bytes, but we'll just let it truncate */
     if (dpvt->chan->is_signed)
-      precord->rval = *(int64_t*)dpvt->chan->buf;
+      sv = *(int64_t*)dpvt->chan->buf;
     else
-      precord->rval = *(uint64_t*)dpvt->chan->buf;
+      uv = *(uint64_t*)dpvt->chan->buf;
     break;
   case 4:
     if (dpvt->chan->is_signed)
-      precord->rval = *(int32_t*)dpvt->chan->buf;
+      sv = *(int32_t*)dpvt->chan->buf;
     else
-      precord->rval = *(uint32_t*)dpvt->chan->buf;
+      uv = *(uint32_t*)dpvt->chan->buf;
     break;
   case 2:
     if (dpvt->chan->is_signed)
-      precord->rval = *(int16_t*)dpvt->chan->buf;
+      sv = *(int16_t*)dpvt->chan->buf;
     else
-      precord->rval = *(uint16_t*)dpvt->chan->buf;
+      uv = *(uint16_t*)dpvt->chan->buf;
     break;
   case 1:
     if (dpvt->chan->is_signed)
-      precord->rval = *(int8_t*)dpvt->chan->buf;
+      sv = *(int8_t*)dpvt->chan->buf;
     else
-      precord->rval = *(uint8_t*)dpvt->chan->buf;
+      uv = *(uint8_t*)dpvt->chan->buf;
     break;
   default:
     assert(!"Unsupported byte count");
@@ -299,9 +301,13 @@ tiAm335XAdc_read_record(aiRecord* precord)
 
   epicsMutexUnlock(dpvt->adc->mutex);
 
-  precord->rval >>= dpvt->chan->shift;
+  /* we aren't actually using rval, but it's nice to see the real adc counts */
+  precord->rval = dpvt->chan->is_signed ? sv : uv;
   precord->udf = FALSE;
-  precord->val = dpvt->slope * precord->rval;
+
+  precord->val = (dpvt->chan->is_signed ? sv : uv) >> dpvt->chan->shift;
+  precord->val *= dpvt->slope;
+
   return 2; /* 2 = dont convert */
 }
 

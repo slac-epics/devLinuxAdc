@@ -334,6 +334,9 @@ tiAm335XAdc_init(int after)
   if (!after)
     return 0;
 
+  if (!buffers)
+    return 0; /* nothing to read. */
+
   /* Build an offset map for each chip, and kick off threads */
   for (struct adc_buffer* b = buffers; b; b = b->next) {
     /* build a channel map and fill out offsets */
@@ -382,8 +385,8 @@ tiAm335XAdc_init(int after)
     .priority = epicsThreadPriorityMedium,
     .stackSize = epicsThreadStackMedium,
   };
-  epicsThreadCreateOpt("ADCREAD", reader_thread, NULL, &opts);
-
+  if (!epicsThreadCreateOpt("ADCREAD", reader_thread, NULL, &opts))
+    return 1;
   return 0;
 }
 

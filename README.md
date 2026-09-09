@@ -1,5 +1,7 @@
 # devLinuxAdc
 
+[doi:10.11578/dc.20260908.2](doi.org/10.11578/dc.20260908.2)
+
 EPICS device support for various ADCs under Linux.
 
 Supported devices:
